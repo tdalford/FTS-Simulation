@@ -8,7 +8,7 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Process, Manager, Semaphore
-import RayTraceFunctionsv2 as rt
+import RayTraceFunctions as rt
 
 c = 300.
 LAST_LENS_EDGE = [-231.24377979, -266.21940725, 0.]
@@ -153,6 +153,16 @@ def generate_spectrum(initial_freq, ij, ymax=18, fac=.95):
     fft_freqs = np.fft.rfftfreq(len(d1), d=(xtot / len(d1)))
     return fft_freqs, fft  # - fft_freqs[1] / 2, fft
 
+def generate_spectrum_correct(initial_freq, ij, fts_throw, fts_step_size):
+    # Fourier transform interferogram
+    d1 = ij
+    D = np.hanning(int(np.shape(d1)[0])) * d1
+    S = np.fft.rfft(D)
+    fft = np.abs(S)
+
+    fft_freqs = np.fft.rfftfreq(len(d1), d=(4 * fts_step_size))
+    return fft_freqs, fft  # - fft_freqs[1] / 2, fft
+
 
 def plot_freq_interferogram(test_freq, rays, delay, c=300., ymax=32, fac=.95):
     ij = []
@@ -187,10 +197,12 @@ def scan_frequency_range(delay, outrays, freqs, ymax):
         fft_amplitudes
 
 
-def get_frequency_shift_and_peak_width(initial_freq, ij, ymax,
+def get_frequency_shift_and_peak_width(initial_freq, ij, ymax, step_size,
                                        print_vals=True, plot_vals=True):
     # generate FFT
-    freqs, fft = generate_spectrum(initial_freq, ij, ymax=ymax, fac=1)
+    # freqs, fft = generate_spectrum(initial_freq, ij - np.mean(ij), ymax=ymax, fac=1)
+    freqs, fft = generate_spectrum_correct(
+        initial_freq, ij - np.mean(ij), ymax, step_size)
 
     # find the peak of the FFT and compare to the frequency
     peak_index = np.argmax(fft[3:])
@@ -213,8 +225,8 @@ def get_frequency_shift_and_peak_width(initial_freq, ij, ymax,
         print('measured frequency from gaussian fit = %s' % popt[1])
 
     if (plot_vals):
-        plt.plot(c * freqs[3:], fft[3:], '.', label='data')
-        x = np.linspace(0, 1000, 5000)
+        plt.plot(c * freqs, fft, '.', label='data')
+        x = np.linspace(0, 315, 2000)
         plt.plot(x, gaussian(x, *popt), alpha=.5, label='fit')
         plt.axvline(x=float(initial_freq), color='green',
                     label=str(initial_freq)+'GHz')

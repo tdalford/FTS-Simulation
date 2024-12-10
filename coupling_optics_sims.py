@@ -10,7 +10,7 @@ from fts_coupling_optics_geo import *
 import plotly.graph_objects as go
 import plotly.io as pio
 import random
-from RayTraceFunctionsv2 import transformLG
+from RayTraceFunctions import transformLG
 pio.renderers.default = 'browser'
 
 # shift_origin = [0., -266.21940725, -231.24377979]

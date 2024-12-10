@@ -5,7 +5,7 @@ import yaml
 import pickle
 import numpy as np
 from multiprocessing import Process, Manager, Semaphore
-import RayTraceFunctionsv2 as rt
+import RayTraceFunctions as rt
 from tqdm import tqdm
 import time
 
@@ -13,7 +13,8 @@ c = 300.
 LAST_LENS_EDGE = [-231.24377979, -266.21940725, 0.]
 COUPLING_OPTICS_ORIGIN = [-233.28894593160666, -276.84436350628596, 0.]
 IN_TO_MM = 1 / (csims.mm_to_in)
-DET_SIZE = 5  # in mm
+# DET_SIZE = 5  # in mm
+# For LF: 14mm, for MF/UHF: 5mm
 FTS_BEAM_ANGLE = -0.190161
 
 
@@ -182,22 +183,22 @@ def create_source_rays_uniform_from_start_displacement(
     return rays
 
 
-def get_centers(n_linear_det):
+def get_centers(n_linear_det, det_spacing):
     displacements = []
     centers = np.linspace(-(n_linear_det // 2), (n_linear_det // 2),
-                          n_linear_det) * DET_SIZE
+                          n_linear_det) * det_spacing
     for x_center in centers:
         for y_center in centers:
             displacements.append((x_center, y_center))
     return displacements
 
 
-def segment_detector(outrays, n_linear_det=5):
+def segment_detector(outrays, n_linear_det, det_spacing, det_size):
     points = outrays[[0, 1, 2]] * IN_TO_MM
 
-    # divide these into segments of length 5mm
+    # divide these into segments of length det_spacing
     centers = np.linspace(-(n_linear_det // 2), (n_linear_det // 2),
-                          n_linear_det) * DET_SIZE
+                          n_linear_det) * det_spacing
     out_data = []
     point_data = []
     for x_center in centers:
@@ -207,7 +208,9 @@ def segment_detector(outrays, n_linear_det=5):
             distance_from_x = np.square(points[0] - center[0])
             distance_from_y = np.square(points[1] - center[1])
             dist_from_center = np.sqrt(distance_from_x + distance_from_y)
-            segment_within = np.where(dist_from_center < (DET_SIZE / 2))[0]
+            # only take rays that are within the feedhorn outer radius (det
+            # size is defined as the diameter)
+            segment_within = np.where(dist_from_center < (det_size / 2))[0]
             out_within = outrays[:, segment_within]
 
             out_data.append(out_within)
@@ -250,11 +253,11 @@ def trace_rays(start_displacement, n_mirror_positions, ymax,
 
 
 # remove the outliers for this as well!-- stop doing this it takes too long
-def segment_rays(total_out, n_linear_det=5):
+def segment_rays(total_out, n_linear_det, det_spacing, det_size):
     total_out_segments = []
     for out in total_out:
         out_segments, det_points = segment_detector(
-            out, n_linear_det=n_linear_det)
+            out, n_linear_det, det_spacing, det_size)
         total_out_segments.append(out_segments)
     return total_out_segments, det_points
 
@@ -299,8 +302,10 @@ def get_interferogram_frequency(outrays, frequencies, debug=True):
     return total_power
 
 
-def get_interferograms(out_data, freqs, add_diffraction_effects=True):
-    total_out_segments, det_points = segment_rays(out_data)
+def get_interferograms(out_data, freqs, n_linear_det, det_spacing, det_size,
+                       add_diffraction_effects=False):
+    total_out_segments, det_points = segment_rays(out_data, n_linear_det,
+                                                  det_spacing, det_size)
     reorganized_segments = []
     for j in range(len(det_points)):
         reorganized_segments.append([])
@@ -311,9 +316,11 @@ def get_interferograms(out_data, freqs, add_diffraction_effects=True):
             reorganized_segments[j].append(data)
 
     if (add_diffraction_effects):
+        # don't want this for now. Debugging
+        raise Exception("Diffracton effects not supported.")
         assert len(freqs == 1)
         reorganized_segments = add_diffraction_path_lengths(
-            reorganized_segments, freqs[0])
+            reorganized_segments, freqs[0], n_linear_det, det_spacing, det_size)
 
     interferograms = []
     for j, det_center in enumerate(det_points):
@@ -329,12 +336,14 @@ def get_interferograms(out_data, freqs, add_diffraction_effects=True):
     return interferograms
 
 
-def get_and_combine_interferograms(all_data, freqs, debug=True,
-                                   add_diffraction_effects=True):
+def get_and_combine_interferograms(
+        all_data, freqs, n_linear_det, det_spacing, det_size, debug=True,
+        add_diffraction_effects=False):
     total_interferograms = []
     for data in tqdm(all_data, disable=(not debug)):
         interferograms = get_interferograms(
-            data, freqs, add_diffraction_effects=add_diffraction_effects)
+            data, freqs, n_linear_det, det_spacing, det_size,
+            add_diffraction_effects=add_diffraction_effects)
         total_interferograms.append(interferograms)
     total_interferograms = np.array(total_interferograms)
     return total_interferograms
@@ -353,23 +362,23 @@ def get_outrays_threaded(
         x_displacements, y_displacements, n_mirror_positions, y_max,
         n_linear_theta=50, n_linear_phi=50, debug=False):
     processes = []
-    max_processes = 55
+    max_processes = 85
     semaphore = Semaphore(max_processes)
     manager = Manager()
     total_outrays = manager.Queue()
 
-    for x in x_displacements:
-        for y in y_displacements:
-            start_displacement = (x, y)
-            semaphore.acquire()
-            process = Process(target=add_outrays, args=(
-                total_outrays, start_displacement, n_mirror_positions,
-                y_max, n_linear_theta, n_linear_phi, semaphore, debug),
-                daemon=True)
+    # re-do and assume that each (x, y) is a single point.
+    for (x, y) in zip(x_displacements, y_displacements):
+        start_displacement = (x, y)
+        semaphore.acquire()
+        process = Process(target=add_outrays, args=(
+            total_outrays, start_displacement, n_mirror_positions,
+            y_max, n_linear_theta, n_linear_phi, semaphore, debug),
+            daemon=True)
 
-            print('process %s starting.' % len(processes))
-            process.start()
-            processes.append(process)
+        print('process %s starting.' % len(processes))
+        process.start()
+        processes.append(process)
 
     # Wait for all the processes to finish before converting to a list.
     for i, process in enumerate(processes):
@@ -387,73 +396,13 @@ def get_outrays_threaded(
     return outrays_list, start_displacement_list
 
 
-def process_interferogram(outrays, start_displacement, total_interferograms, z,
-                          freqs, semaphore):
-    # these are individual rays from one point source
-    if z != csims.FOCUS[2]:
-        outrays_at_z = get_rays_at_z(outrays, z)
-    interferograms = get_interferograms(outrays_at_z, freqs)
-    total_interferograms.put([interferograms, start_displacement])
-    semaphore.release()
-
-
-def postprocess_interferograms(outrays_list, displacement_list, freqs,
-                               z=csims.FOCUS[2]):
-    processes = []
-    max_processes = 55
-    semaphore = Semaphore(max_processes)
-    manager = Manager()
-    total_interferograms = manager.Queue()
-
-    for outrays, displacement in zip(outrays_list, displacement_list):
-        semaphore.acquire()
-        process = Process(target=process_interferogram, args=(
-            outrays, displacement, total_interferograms, z, freqs, semaphore))
-
-        print('process %s starting.' % len(processes))
-        process.start()
-        processes.append(process)
-
-    # Wait for all the processes to finish before converting to a list.
-    for i, process in enumerate(processes):
-        print('process %s joining.' % i)
-        process.join()
-        print('process %s finishg.' % i)
-
-    # convert the shared queue to a list.
-    total_interferograms_list = []
-    start_displacement_list = []
-    while (total_interferograms.qsize() != 0):
-        interferograms, displacement = total_interferograms.get()
-        total_interferograms_list.append(interferograms)
-        start_displacement_list.append(displacement)
-    return total_interferograms_list, start_displacement_list
-
-
-def postprocess():
-    outrays = pickle.load(
-        open("/data/talford/FTS_sim_results/total_outrays_0_11_11.p", "rb"))
-    displacements = np.zeros(len(outrays))  # create dummy displacements
-    #displacements = pickle.load(open("data/displacement_0.p", "rb"))
-    freqs = np.arange(20, 300, .1)
-
-    print(freqs)
-    total_interferograms, _ = postprocess_interferograms(
-        outrays, displacements, freqs, z=csims.FOCUS[2])
-    total_interferograms = np.array(total_interferograms)
-    interferogram_sum = np.sum(total_interferograms, axis=0)
-
-    pickle.dump(interferogram_sum, open(
-        "/data/talford/FTS_sim_results/final_summed_interferograms_0_11_11_high_res.p", "wb"))
-    # save this for loading elsewhere
-    print('finished!')
-
-
 def process_interferogram_discrete(
-        outrays, frequency, total_interferograms, semaphore):
+        outrays, frequency, total_interferograms, n_linear_det, det_spacing,
+        det_size, semaphore):
     interferogram_sum_frequency = np.sum(get_and_combine_interferograms(
-        outrays, np.arange(frequency, frequency + 1, 1),
-        debug=False, add_diffraction_effects=True), axis=0)
+        outrays, np.arange(frequency, frequency + 1, 1), n_linear_det,
+        det_spacing, det_size, debug=False, add_diffraction_effects=False),
+                                         axis=0)
     total_interferograms.put([frequency, interferogram_sum_frequency])
     semaphore.release()
 
@@ -464,7 +413,7 @@ def get_interferogram_rays_at_z(ray_data, z):
         ray_data[i]))] for i in range(len(ray_data))]
 
 
-def get_added_distance(dist_from_center, frequency, aperture_size=DET_SIZE):
+def get_added_distance(dist_from_center, frequency, aperture_size):
     # added distance calculated to be (w^2 * 1.22 * lambda / d^2)
     wavelength = (c / frequency)  # in mm
     # we don't go above 300 Ghz usually.. can change if we do
@@ -472,9 +421,9 @@ def get_added_distance(dist_from_center, frequency, aperture_size=DET_SIZE):
     return ((dist_from_center ** 2) * 1.22 * wavelength) / (aperture_size ** 2)
 
 
-def add_diffraction_path_lengths(reorganized_segments, frequency,
-                                 n_linear_det=5):
-    centers = get_centers(n_linear_det=n_linear_det)
+def add_diffraction_path_lengths(reorganized_segments, frequency, n_linear_det,
+                                 det_spacing, det_size):
+    centers = get_centers(n_linear_det, det_spacing)
     assert len(reorganized_segments) == len(centers)
     diffraction_added_segments = []
     for center, segment in zip(centers, reorganized_segments):
@@ -484,33 +433,65 @@ def add_diffraction_path_lengths(reorganized_segments, frequency,
             diffraction_rays = np.copy(mirror_path_rays)
             dist_from_aperture_center = np.sqrt(np.sum(np.square((
                 diffraction_rays[[0, 1]] * IN_TO_MM).T - center), axis=1))
-            assert np.all(dist_from_aperture_center <= (DET_SIZE / 2))
+            assert np.all(dist_from_aperture_center <= (det_size / 2))
             diffraction_rays[8] += get_added_distance(
-                dist_from_aperture_center, frequency)
+                dist_from_aperture_center, frequency, det_size)
             diffraction_segment_rays.append(diffraction_rays)
         diffraction_added_segments.append(diffraction_segment_rays)
     return diffraction_added_segments
 
+def create_uniformly_spaced_points_circle(radius, num_points):
+    # Determine the number of radial layers
+    num_layers = int(np.sqrt(num_points) / 1.7) # Approximate number of layers
 
-def postprocess_interferograms_discrete(ray_data, frequencies,
-                                        z_shift=0):
+    # Initialize arrays for storing points
+    x = []
+    y = []
+
+    # Generate points layer by layer
+    for i in range(0, num_layers + 1):
+        # Radial coordinate for this layer
+        # r = np.sqrt(i / num_layers) * radius
+        r = (i / num_layers) * radius
+
+        # Number of points in this layer (proportional to radius)
+        n_theta = int(2 * np.pi * r * num_layers / radius)  # Points proportional to circumference
+        if n_theta == 0:  # Ensure at least one point per layer
+            n_theta = 1
+
+        # Angular coordinates
+        theta = np.linspace(0, 2 * np.pi, n_theta, endpoint=False)
+
+        # Convert to Cartesian coordinates and store
+        x.extend(r * np.cos(theta))
+        y.extend(r * np.sin(theta))
+
+    # Convert to numpy arrays for easier handling
+    x = np.array(x)
+    y = np.array(y)
+    return x, y
+
+
+def postprocess_interferograms_discrete(ray_data, frequencies, n_linear_det,
+                                        det_spacing, det_size, z_shift=0):
 
     processes = []
-    max_processes = 55
+    max_processes = 85
     semaphore = Semaphore(max_processes)
     manager = Manager()
     total_interferograms = manager.Queue()
     ray_z_data = ray_data
 
     if z_shift != 0:
-        print('Propagating rays z shift of %s inches.' % z_shift)
+        print('Propagating rays to a z shift of %s inches.' % z_shift)
         ray_z_data = get_interferogram_rays_at_z(
             ray_data, csims.FOCUS[2] + z_shift)
 
     for freq in frequencies:
         semaphore.acquire()
         process = Process(target=process_interferogram_discrete, args=(
-            ray_z_data, freq, total_interferograms, semaphore))
+            ray_z_data, freq, total_interferograms, n_linear_det, det_spacing,
+            det_size, semaphore))
 
         process.start()
         processes.append(process)
@@ -532,79 +513,3 @@ def postprocess_interferograms_discrete(ray_data, frequencies,
 
     return np.array(total_interferogram_list)[sort_inds], \
         np.array(frequency_list)[sort_inds]
-
-
-def postprocess_discrete():
-    data = pickle.load(
-        open("/data/talford/FTS_sim_results/total_outrays_0_40_31_31.p", "rb"))
-    freqs = np.arange(20, 300, 1)
-    total_interferogram_list, frequency_list = \
-        postprocess_interferograms_discrete(data, freqs)
-
-    pickle.dump([frequency_list, total_interferogram_list], open(
-        "/data/talford/FTS_sim_results/all_discrete_interferograms.p", "wb"))
-    # save this for loading elsewhere
-    print('finished!')
-
-
-def postprocess_discrete_z_positions():
-
-    data = []
-    fname = "/data/talford/FTS_sim_results/total_outrays_LF_0_35_25_25.p"
-
-    with open(fname, 'rb') as f:
-        try:
-            while True:
-                data.append(pickle.load(f))
-        except EOFError:
-            pass
-    # It should take around 14h to run 21 of these data points. To cut down on
-    # this I'll change the frequency resolution to 5 and run 11 data points.
-    # so this should now take ~1.4 hours
-
-    # In actuality it took 3ish hours
-    freqs = np.arange(15, 80, 5)
-    fname = "/data/talford/FTS_sim_results/all_discrete_interferograms_z" + (
-        "LF_0_35_25_25.p")
-    z_coordinates = (1 / IN_TO_MM) * np.linspace(-50, 75, 31)
-
-    for z in z_coordinates:
-        total_interferogram_list_at_z, frequency_list = \
-            postprocess_interferograms_discrete(data, freqs, z_shift=z)
-
-        pickle.dump([z, frequency_list, total_interferogram_list_at_z], open(
-            fname, "ab"), pickle.HIGHEST_PROTOCOL)
-
-    # save this for loading elsewhere
-    print('finished!')
-
-
-def main():
-    FTS_stage_throw = 35.     # total throw extent in mm
-    FTS_stage_step_size = .375  # FTS step size in mm
-    n_mirror_positions = (2 * FTS_stage_throw / FTS_stage_step_size)
-
-    x_vals = np.linspace(-35, 35, 25)
-    y_vals = np.linspace(-35, 35, 25)
-
-    total_outrays, displacements = get_outrays_threaded(
-        x_vals, y_vals, n_mirror_positions, FTS_stage_throw,
-        n_linear_theta=300, n_linear_phi=15, debug=False)
-
-    fname = "/data/talford/FTS_sim_results/total_outrays_LF_0_35_25_25.p"
-    for outrays in total_outrays:
-        with open(fname, 'ab') as output:
-            pickle.dump(outrays, output, pickle.HIGHEST_PROTOCOL)
-
-    pickle.dump(displacements, open(
-        "/data/talford/FTS_sim_results/displacements_LF_0_35_25_25.p", "wb"))
-
-    # save this for loading elsewhere
-    print('finished!')
-
-
-if __name__ == '__main__':
-    # main()
-    # postprocess()
-    postprocess_discrete_z_positions()
-    exit()
