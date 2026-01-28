@@ -396,22 +396,6 @@ def segment_rays(total_out, n_linear_det, det_spacing, det_size):
     return total_out_segments, det_points
 
 
-def fwhm_truncated(freq_ghz):
-    Ax, px = 1786.4203351541419, 0.8613884749634632
-    Ay, py = 4557.6005477770805, 1.0183121753110373
-    FMAX = 110.0
-
-    f = np.asarray(freq_ghz, dtype=float)
-
-    fx_raw = Ax * f**(-px)
-    fy_raw = Ay * f**(-py)
-
-    fx = fx_raw / (1 + fx_raw / FMAX)
-    fy = fy_raw / (1 + fy_raw / FMAX)
-
-    return (fx + fy) / 2
-
-
 def data_to_matrix(center_data, weight_rays=True):
     max_rays_num = max([data.shape[1] for data in center_data])
     if max_rays_num == 0:
@@ -440,20 +424,11 @@ def get_interferogram_frequency(outrays, frequencies, debug=True):
     theta = outrays[:, :, 0]
     intensity = outrays[:, :, 1]
     distance = outrays[:, :, 2]
-    # thetas = outrays[:, :, 3]
     ex1 = np.sqrt(intensity) * np.cos(theta)
     ey1 = np.sqrt(intensity) * np.sin(theta)
 
     total_power = np.zeros(outrays.shape[0])
     for freq in tqdm(frequencies, disable=(not debug)):
-        # fwhm_feed = fwhm_truncated(freq)
-        # sigma = gaussian_sigma_from_fwhm(np.deg2rad(fwhm_feed))
-        # weight = np.exp(-0.5 * (thetas / sigma**2))
-        # weight = (weight * 1e4 / np.sum(weight))
-        # weight = np.sqrt(weight)
-        # normalize the weights so that the frequency doesn't bias since the
-        # feed profile should be already accounted for in the bandpass in terms
-        # of frequency weighting. It's really the ray weighting we want here.
         
         wavelength = c / freq
         phase = np.exp(1j * (distance * 2 * np.pi / wavelength))
