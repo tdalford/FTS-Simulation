@@ -59,6 +59,24 @@ def remove_outliers(out, threshold=5, debug=False):
     return np.array(new_out).T
 
 
+def gaussian_sigma_from_fwhm(fwhm_rad):
+    return fwhm_rad / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+
+
+def weight_rays_gaussian(rays, normal_vector, fwhm_deg=30):
+    # Currently approximates the feedhorn ray distribution to the distribution
+    # to a radially symmetric gaussian with FWHM around 30 degrees. This is a
+    # good enough approximation for our purposes, although in actuality the
+    # FWHM can vary from ~15 to 60 degrees, depending on the band, and the x
+    # and y FWHMs vary slightly.
+    cos_angle = rays[[3, 4, 5]].T @ normal_vector
+    theta = np.arccos(cos_angle)
+    sigma = gaussian_sigma_from_fwhm(np.deg2rad(fwhm_deg))
+    weight = np.exp(-0.5 * (theta / sigma**2))
+    # Multiply the intensity by our weight.
+    rays[7] *= weight
+    return rays
+
 # just subtract our z coordinate until we hit -20.9
 # I should probably get rid of these magic numbers
 def get_distances_at_z(out, z_coordinate):
@@ -183,6 +201,75 @@ def create_source_rays_uniform_from_start_displacement(
     return rays
 
 
+def create_source_rays_lambertian(
+        source_origin, source_normal_vec, horiz_displacement, 
+        vert_displacement, n_linear_theta, n_linear_phi, config, 
+        check_rays=True, theta_bound=np.pi / 2, timeout=10, 
+        count_thetas=False):
+    # first create rays distributed in the upwards cone
+    # and then rotate them to center them around the normal
+    # also create them around a variety of starting points
+    # assume radially symmetric source
+    rotation_matrix = get_rotation_matrix(source_normal_vec, [0, 0, 1])
+    rays = []
+    
+    if (count_thetas):
+        good_vals = []
+    
+    # n^2 computations here
+    starting_time = time.time()
+    mu_min = np.cos(theta_bound)
+    u_vals = mu_min + (1 - mu_min) * (np.arange(n_linear_theta) + 0.5) / n_linear_theta
+    for u in u_vals:
+        mu = np.sqrt(u)
+        theta_val = np.arccos(mu)
+        for phi_val in np.linspace(0, 2 * np.pi, n_linear_phi, endpoint=False):
+            if time.time() - starting_time > timeout:
+                print('timing out..')
+                return rays
+
+            point_origin = [horiz_displacement, vert_displacement, 0]
+
+            # Direction of ray away from the starting point
+            r_hat = [np.sin(theta_val) * np.cos(phi_val), 
+                     np.sin(theta_val) * np.sin(phi_val), np.cos(theta_val)]
+
+            transformed_starting_vector = -1 * np.array(transform_points(
+                [r_hat[0]], [r_hat[1]], [r_hat[2]], [0, 0, 0], rotation_matrix)).flatten()
+
+            transformed_starting_point = np.array(transform_points(
+                [point_origin[0]], [point_origin[1]], [point_origin[2]], 
+                source_origin, rotation_matrix)).flatten()
+
+            
+            # polarization vector arbitratily defined here, but strategically
+            # not set to some value so that some light has to be reflected and
+            # transmitted at the first polarizer.
+            polarization_angle = .123
+            intensity = 1.0
+            ray = [polarization_angle, intensity, transformed_starting_point.tolist(), 
+                transformed_starting_vector.tolist(), 0]
+            
+            if (check_rays):
+                # strategically choose our starting rays such that they make it
+                # through the to the first ellipse that we hit
+                paths = ['T4', 'E6']
+                final_ray = rt.run_ray_through_sim(ray, config, None, paths)
+                if (final_ray is not None):
+                    rays.append(ray)
+                    if (count_thetas):
+                        good_vals.append([theta_val, phi_val])
+            else:
+                rays.append(ray)
+                if (count_thetas):
+                    # for debugging purposes
+                    good_vals.append([theta_val, phi_val])
+    
+    if (count_thetas):
+        return rays, good_vals
+    return rays
+
+
 def get_centers(n_linear_det, det_spacing):
     displacements = []
     centers = np.linspace(-(n_linear_det // 2), (n_linear_det // 2),
@@ -218,8 +305,8 @@ def segment_detector(outrays, n_linear_det, det_spacing, det_size):
     return out_data, np.array(point_data)
 
 
-def trace_rays(start_displacement, n_mirror_positions, ymax,
-               n_linear_theta=100, n_linear_phi=100, debug=False):
+def trace_rays_uniform(start_displacement, n_mirror_positions, ymax,
+                       n_linear_theta=100, n_linear_phi=100, debug=False):
     # For each starting position, trace the rays and segment the detectors.
     # Create an interferogram for each detector for each starting position
     # i.e. each starting position should have 36 interferograms (1 raytrace
@@ -252,6 +339,53 @@ def trace_rays(start_displacement, n_mirror_positions, ymax,
     return total_outrays
 
 
+# Use lambertian distribution.
+def trace_rays(start_displacement, n_mirror_positions, ymax, n_linear_theta=100, 
+               n_linear_phi=100, debug=False):
+    # The way I originally defined the FTS in my config files was backwards
+    # since Jeff initially wanted to do a reverse raytrace. Later I realized
+    # that the nature of the thermal source required a forwards raytrace within
+    # the limited sampling space we have. Thus I just grab the source position
+    # from what I has originally defined as the 'detector', while the rest of
+    # the FTS raytrace is defined via the forward-raytrace oriented config file
+    # defined in the aptly named 'lab_fts_dims_mcmahon_backwards.yml'
+    with open("lab_fts_dims_act.yml", "r") as stream:
+        config = yaml.safe_load(stream)
+
+    starting_rays = create_source_rays_lambertian(
+        config['detector']['center'], config['detector']['normal_vec'],
+        start_displacement[0], start_displacement[1], n_linear_theta,
+        n_linear_phi, config, theta_bound=np.pi / 2, check_rays=True,
+        timeout=100)
+
+    with open("lab_fts_dims_mcmahon_backwards.yml", "r") as stream:
+        config = yaml.safe_load(stream)
+
+    # I originally described the possible paths through the FTS in reverse
+    # also. Realistically I believe they should be symmetric for both forwards
+    # and reverse, but originally I had some other operations in there which is
+    # why I reverse them.
+    possible_paths = [path[::-1] for path in rt.get_possible_paths()]
+
+    # Propagate the source rays through the simulation (to the end of the FTS)
+    # for all polarizer paths and central mirror positions.
+    delay, final_rays = rt.run_all_rays_through_sim_optimized(
+        starting_rays, config, n_mirror_positions, paths=possible_paths,
+        ymax=ymax, progressbar=(debug))
+
+    total_outrays = []
+
+    # Transform the rays to the frame of the coupling optics and propgate them
+    # through this optical system.
+    for rays in tqdm(final_rays, disable=(not debug)):
+        transformed_rays = transform_rays_to_coupling_optics_frame(rays)
+        out_forwards = csims.run_rays_forwards_input_rays(
+            transformed_rays, z_ap=csims.FOCUS[2], plot=False)
+        total_outrays.append(out_forwards)
+
+    return total_outrays
+
+
 # remove the outliers for this as well!-- stop doing this it takes too long
 def segment_rays(total_out, n_linear_det, det_spacing, det_size):
     total_out_segments = []
@@ -262,12 +396,32 @@ def segment_rays(total_out, n_linear_det, det_spacing, det_size):
     return total_out_segments, det_points
 
 
-def data_to_matrix(center_data):
+def fwhm_truncated(freq_ghz):
+    Ax, px = 1786.4203351541419, 0.8613884749634632
+    Ay, py = 4557.6005477770805, 1.0183121753110373
+    FMAX = 110.0
+
+    f = np.asarray(freq_ghz, dtype=float)
+
+    fx_raw = Ax * f**(-px)
+    fy_raw = Ay * f**(-py)
+
+    fx = fx_raw / (1 + fx_raw / FMAX)
+    fy = fy_raw / (1 + fy_raw / FMAX)
+
+    return (fx + fy) / 2
+
+
+def data_to_matrix(center_data, weight_rays=True):
     max_rays_num = max([data.shape[1] for data in center_data])
     if max_rays_num == 0:
         return None
     total_rays = []
     for data in center_data:
+        if weight_rays:
+            # The normal vector of our final rays is just (0, 0, -1) in the
+            # coordinate system we define.
+            data = weight_rays_gaussian(data, [0, 0, -1])
         # only keep polarization, intensity, and phase
         # could also keep detector position and angle separately
         # if we're curious!
@@ -286,11 +440,21 @@ def get_interferogram_frequency(outrays, frequencies, debug=True):
     theta = outrays[:, :, 0]
     intensity = outrays[:, :, 1]
     distance = outrays[:, :, 2]
+    # thetas = outrays[:, :, 3]
     ex1 = np.sqrt(intensity) * np.cos(theta)
     ey1 = np.sqrt(intensity) * np.sin(theta)
 
     total_power = np.zeros(outrays.shape[0])
     for freq in tqdm(frequencies, disable=(not debug)):
+        # fwhm_feed = fwhm_truncated(freq)
+        # sigma = gaussian_sigma_from_fwhm(np.deg2rad(fwhm_feed))
+        # weight = np.exp(-0.5 * (thetas / sigma**2))
+        # weight = (weight * 1e4 / np.sum(weight))
+        # weight = np.sqrt(weight)
+        # normalize the weights so that the frequency doesn't bias since the
+        # feed profile should be already accounted for in the bandpass in terms
+        # of frequency weighting. It's really the ray weighting we want here.
+        
         wavelength = c / freq
         phase = np.exp(1j * (distance * 2 * np.pi / wavelength))
         ex = ex1 * phase
@@ -303,7 +467,7 @@ def get_interferogram_frequency(outrays, frequencies, debug=True):
 
 
 def get_interferograms(out_data, freqs, n_linear_det, det_spacing, det_size,
-                       add_diffraction_effects=False):
+                       add_diffraction_effects=False, weight_rays=True):
     total_out_segments, det_points = segment_rays(out_data, n_linear_det,
                                                   det_spacing, det_size)
     reorganized_segments = []
@@ -325,7 +489,8 @@ def get_interferograms(out_data, freqs, n_linear_det, det_spacing, det_size,
     interferograms = []
     for j, det_center in enumerate(det_points):
         # get the max number of rays
-        data_matrix = data_to_matrix(reorganized_segments[j])
+        data_matrix = data_to_matrix(reorganized_segments[
+            j], weight_rays=weight_rays)
         if (data_matrix is None):
             interferogram = np.zeros(len(reorganized_segments[0]))
         else:
@@ -338,12 +503,13 @@ def get_interferograms(out_data, freqs, n_linear_det, det_spacing, det_size,
 
 def get_and_combine_interferograms(
         all_data, freqs, n_linear_det, det_spacing, det_size, debug=True,
-        add_diffraction_effects=False):
+        add_diffraction_effects=False, weight_rays=True):
     total_interferograms = []
     for data in tqdm(all_data, disable=(not debug)):
         interferograms = get_interferograms(
             data, freqs, n_linear_det, det_spacing, det_size,
-            add_diffraction_effects=add_diffraction_effects)
+            add_diffraction_effects=add_diffraction_effects,
+            weight_rays=weight_rays)
         total_interferograms.append(interferograms)
     total_interferograms = np.array(total_interferograms)
     return total_interferograms
