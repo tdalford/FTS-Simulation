@@ -78,8 +78,8 @@ def weight_rays_gaussian(rays, normal_vector, fwhm_deg=30):
     return rays
 
 # just subtract our z coordinate until we hit -20.9
-# I should probably get rid of these magic numbers
 def get_distances_at_z(out, z_coordinate):
+    # z position is out[2], z direction is out[5]
     iters = (out[2] - z_coordinate) / out[5]
     return out[8] - iters / csims.mm_to_in
 
@@ -202,9 +202,9 @@ def create_source_rays_uniform_from_start_displacement(
 
 
 def create_source_rays_lambertian(
-        source_origin, source_normal_vec, horiz_displacement, 
-        vert_displacement, n_linear_theta, n_linear_phi, config, 
-        check_rays=True, theta_bound=np.pi / 2, timeout=10, 
+        source_origin, source_normal_vec, horiz_displacement,
+        vert_displacement, n_linear_theta, n_linear_phi, config,
+        check_rays=True, theta_bound=np.pi / 2, timeout=10,
         count_thetas=False):
     # first create rays distributed in the upwards cone
     # and then rotate them to center them around the normal
@@ -266,6 +266,68 @@ def create_source_rays_lambertian(
                 if (count_thetas):
                     # for debugging purposes
                     good_vals.append([theta_val, phi_val])
+    
+    if (count_thetas):
+        return rays, good_vals
+    return rays
+
+def create_source_rays_lambertian_monte_carlo(
+        source_origin, source_normal_vec, horiz_displacement,
+        vert_displacement, n_rays, config,
+        check_rays=True, theta_bound=np.pi / 2,
+        count_thetas=False):
+    # first create rays distributed in the upwards cone
+    # and then rotate them to center them around the normal
+    # also create them around a variety of starting points
+    # assume radially symmetric source
+    rotation_matrix = get_rotation_matrix(source_normal_vec, [0, 0, 1])
+    rays = []
+    if (count_thetas):
+        good_vals = []
+    mu_min = np.cos(theta_bound)
+
+    while len(rays) < n_rays:
+        u = np.random.random()
+        mu = np.sqrt(mu_min**2 + (1 - mu_min**2) * u)
+        theta_val = np.arccos(mu)
+        phi_val = np.random.uniform(0, 2 * np.pi)
+
+        point_origin = [horiz_displacement, vert_displacement, 0]
+
+        # Direction of ray away from the starting point
+        r_hat = [np.sin(theta_val) * np.cos(phi_val), 
+                    np.sin(theta_val) * np.sin(phi_val), np.cos(theta_val)]
+
+        transformed_starting_vector = -1 * np.array(transform_points(
+            [r_hat[0]], [r_hat[1]], [r_hat[2]], [0, 0, 0], rotation_matrix)).flatten()
+
+        transformed_starting_point = np.array(transform_points(
+            [point_origin[0]], [point_origin[1]], [point_origin[2]], 
+            source_origin, rotation_matrix)).flatten()
+
+
+        # polarization vector arbitratily defined here, but strategically
+        # not set to some value so that some light has to be reflected and
+        # transmitted at the first polarizer.
+        polarization_angle = .123
+        intensity = 1.0
+        ray = [polarization_angle, intensity, transformed_starting_point.tolist(), 
+            transformed_starting_vector.tolist(), 0]
+
+        if (check_rays):
+            # strategically choose our starting rays such that they make it
+            # through the to the first ellipse that we hit
+            paths = ['T4', 'E6']
+            final_ray = rt.run_ray_through_sim(ray, config, None, paths)
+            if (final_ray is not None):
+                rays.append(ray)
+                if (count_thetas):
+                    good_vals.append([theta_val, phi_val])
+        else:
+            rays.append(ray)
+            if (count_thetas):
+                # for debugging purposes
+                good_vals.append([theta_val, phi_val])
     
     if (count_thetas):
         return rays, good_vals
@@ -342,8 +404,8 @@ def trace_rays_uniform(start_displacement, n_mirror_positions, ymax,
 
 
 # Use lambertian distribution.
-def trace_rays(start_displacement, n_mirror_positions, ymax, n_linear_theta=100, 
-               n_linear_phi=100, debug=False):
+def trace_rays(start_displacement, n_mirror_positions, ymax, n_rays,
+               debug=False):
     # The way I originally defined the FTS in my config files was backwards
     # since Jeff initially wanted to do a reverse raytrace. Later I realized
     # that the nature of the thermal source required a forwards raytrace within
@@ -354,11 +416,10 @@ def trace_rays(start_displacement, n_mirror_positions, ymax, n_linear_theta=100,
     with open("lab_fts_dims_act.yml", "r") as stream:
         config = yaml.safe_load(stream)
 
-    starting_rays = create_source_rays_lambertian(
+    starting_rays = create_source_rays_lambertian_monte_carlo(
         config['detector']['center'], config['detector']['normal_vec'],
-        start_displacement[0], start_displacement[1], n_linear_theta,
-        n_linear_phi, config, theta_bound=np.pi / 2, check_rays=True,
-        timeout=100)
+        start_displacement[0], start_displacement[1], n_rays,
+        config, theta_bound=np.pi / 2, check_rays=True)
 
     with open("lab_fts_dims_mcmahon_backwards.yml", "r") as stream:
         config = yaml.safe_load(stream)
@@ -388,7 +449,7 @@ def trace_rays(start_displacement, n_mirror_positions, ymax, n_linear_theta=100,
     return total_outrays
 
 
-# remove the outliers for this as well!-- stop doing this it takes too long
+# stop outlier removal since it takes too long
 def segment_rays(total_out, n_linear_det, det_spacing, det_size):
     total_out_segments = []
     for out in total_out:
@@ -493,19 +554,18 @@ def get_and_combine_interferograms(
 
 
 def add_outrays(total_outrays, start_displacement, n_mirror_positions,
-                y_max, n_linear_theta, n_linear_phi, semaphore, debug):
+                y_max, n_rays, semaphore, debug):
     outrays = trace_rays(start_displacement, n_mirror_positions, y_max,
-                         n_linear_theta=n_linear_theta,
-                         n_linear_phi=n_linear_phi, debug=debug)
+                         n_rays, debug=debug)
     total_outrays.put([outrays, start_displacement])
     semaphore.release()
 
 
 def get_outrays_threaded(
         x_displacements, y_displacements, n_mirror_positions, y_max,
-        n_linear_theta=50, n_linear_phi=50, debug=False):
+        n_rays=225, debug=False):
     processes = []
-    max_processes = 85
+    max_processes = 8
     semaphore = Semaphore(max_processes)
     manager = Manager()
     total_outrays = manager.Queue()
@@ -516,7 +576,7 @@ def get_outrays_threaded(
         semaphore.acquire()
         process = Process(target=add_outrays, args=(
             total_outrays, start_displacement, n_mirror_positions,
-            y_max, n_linear_theta, n_linear_phi, semaphore, debug),
+            y_max, n_rays, semaphore, debug),
             daemon=True)
 
         print('process %s starting.' % len(processes))
@@ -619,7 +679,7 @@ def postprocess_interferograms_discrete(ray_data, frequencies, n_linear_det,
                                         det_spacing, det_size, z_shift=0):
 
     processes = []
-    max_processes = 85
+    max_processes = 8
     semaphore = Semaphore(max_processes)
     manager = Manager()
     total_interferograms = manager.Queue()
