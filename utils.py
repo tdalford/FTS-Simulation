@@ -219,10 +219,12 @@ def create_source_rays_lambertian(
     # n^2 computations here
     starting_time = time.time()
     mu_min = np.cos(theta_bound)
-    u_vals = mu_min + (1 - mu_min) * (np.arange(n_linear_theta) + 0.5) / n_linear_theta
-    for u in u_vals:
-        mu = np.sqrt(u)
-        theta_val = np.arccos(mu)
+    u_vals = (np.arange(n_linear_theta) + 0.5) / n_linear_theta  # in (0,1)
+
+    # correct truncated Lambert mapping
+    mu = np.sqrt(mu_min**2 + (1.0 - mu_min**2) * u_vals)
+    theta_vals = np.arccos(mu)
+    for theta_val in theta_vals:
         for phi_val in np.linspace(0, 2 * np.pi, n_linear_phi, endpoint=False):
             if time.time() - starting_time > timeout:
                 print('timing out..')
@@ -457,7 +459,7 @@ def get_interferograms(out_data, freqs, n_linear_det, det_spacing, det_size,
     if (add_diffraction_effects):
         # don't want this for now. Debugging
         raise Exception("Diffracton effects not supported.")
-        assert len(freqs == 1)
+        assert len(freqs) == 1
         reorganized_segments = add_diffraction_path_lengths(
             reorganized_segments, freqs[0], n_linear_det, det_spacing, det_size)
 
