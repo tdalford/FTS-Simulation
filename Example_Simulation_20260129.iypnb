@@ -2,7 +2,7 @@
  "cells": [
   {
    "cell_type": "markdown",
-   "id": "070395b4",
+   "id": "59e3c28c",
    "metadata": {},
    "source": [
     "# Imports"
@@ -11,7 +11,7 @@
   {
    "cell_type": "code",
    "execution_count": 1,
-   "id": "59b8264b",
+   "id": "fb01fc01",
    "metadata": {},
    "outputs": [
     {
@@ -45,7 +45,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "17e0de9a",
+   "id": "d94b508f",
    "metadata": {},
    "source": [
     "# Definitions for Plotting"
@@ -54,7 +54,7 @@
   {
    "cell_type": "code",
    "execution_count": 2,
-   "id": "47621fef",
+   "id": "dd4a5c1a",
    "metadata": {},
    "outputs": [],
    "source": [
@@ -271,7 +271,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "cf30d7c7",
+   "id": "b50c063e",
    "metadata": {},
    "source": [
     "# Create mesh of ellipse points to plot"
@@ -280,7 +280,7 @@
   {
    "cell_type": "code",
    "execution_count": 3,
-   "id": "82366f16",
+   "id": "e9d92f52",
    "metadata": {},
    "outputs": [
     {
@@ -369,7 +369,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "22ec9ef8",
+   "id": "624d1c20",
    "metadata": {},
    "source": [
     "# Raytracing Features"
@@ -377,7 +377,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "1d7c5770",
+   "id": "7dd74cb9",
    "metadata": {},
    "source": [
     "## Example Raytrace through the FTS"
@@ -386,7 +386,7 @@
   {
    "cell_type": "code",
    "execution_count": 4,
-   "id": "0befb81f",
+   "id": "aaec0bb5",
    "metadata": {},
    "outputs": [
     {
@@ -471,7 +471,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "b15b5cc2",
+   "id": "fabfb296",
    "metadata": {},
    "source": [
     "## Example of the frequency shift\n"
@@ -479,7 +479,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "b4530441",
+   "id": "4780f1fc",
    "metadata": {},
    "source": [
     "Here I show an example of the frequency shift seen in our data. I will do this with a much quicker to run example which inspects the path length difference in the rays for a fixed central mirror position and roughly determines the frequency shift from that single point. Additionally, this example finds the shift with respect to the starting offset on the source. In actuality what matters is how the ray position is mapped at plane of the detector and segmented within the detection radius of a detector feed, although the level of shift found is fairly similar in both cases."
@@ -487,7 +487,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "78f6feee",
+   "id": "0aa4c206",
    "metadata": {},
    "source": [
     "This function, given an initial starting position from which the rays disperse,\n",
@@ -498,7 +498,7 @@
   {
    "cell_type": "code",
    "execution_count": 5,
-   "id": "8e2e6a0d",
+   "id": "c75d57ae",
    "metadata": {},
    "outputs": [],
    "source": [
@@ -530,7 +530,7 @@
   {
    "cell_type": "code",
    "execution_count": 6,
-   "id": "d0e99dff",
+   "id": "dbcabd75",
    "metadata": {
     "scrolled": true
    },
@@ -570,7 +570,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "486f7c4b",
+   "id": "3aa250f3",
    "metadata": {},
    "source": [
     "Let's take a look at what some of the path lengths are in the final rays.\n",
@@ -582,7 +582,7 @@
   {
    "cell_type": "code",
    "execution_count": 7,
-   "id": "525c5c5d",
+   "id": "97529e18",
    "metadata": {},
    "outputs": [
     {
@@ -612,7 +612,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "9fa43c48",
+   "id": "dee1c3a7",
    "metadata": {},
    "source": [
     "In actuality, we see that one of the two paths has fewer rays than the other\n",
@@ -625,7 +625,7 @@
   {
    "cell_type": "code",
    "execution_count": 8,
-   "id": "eb432b69",
+   "id": "7524361d",
    "metadata": {},
    "outputs": [
     {
@@ -648,7 +648,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "c4aef57a",
+   "id": "fdee5081",
    "metadata": {},
    "source": [
     "Now, let's look at the estimated frequency shift factor for every single source position:"
@@ -657,7 +657,7 @@
   {
    "cell_type": "code",
    "execution_count": 9,
-   "id": "8ef90aca",
+   "id": "1f70626d",
    "metadata": {},
    "outputs": [],
    "source": [
@@ -673,7 +673,7 @@
   {
    "cell_type": "code",
    "execution_count": 10,
-   "id": "361d1b9e",
+   "id": "7dec2e06",
    "metadata": {},
    "outputs": [
     {
@@ -714,7 +714,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "7fcfe871",
+   "id": "37c0aa93",
    "metadata": {},
    "source": [
     "This gives you an estimation of the frequency shift effect we see and is a nice\n",
@@ -725,7 +725,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "95fdb3a3",
+   "id": "eec55b96",
    "metadata": {},
    "source": [
     "## Creating a measured interferogram"
@@ -733,7 +733,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "19b01c5a",
+   "id": "7aa6e22e",
    "metadata": {},
    "source": [
     "Now, I will show a smaller more contained example of actually simulating\n",
@@ -745,7 +745,7 @@
   {
    "cell_type": "code",
    "execution_count": 11,
-   "id": "5aff69fe",
+   "id": "eecc39ab",
    "metadata": {},
    "outputs": [],
    "source": [
@@ -801,7 +801,7 @@
   {
    "cell_type": "code",
    "execution_count": 12,
-   "id": "d811d015",
+   "id": "a1afd9d4",
    "metadata": {},
    "outputs": [
     {
@@ -852,7 +852,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "ab93041c",
+   "id": "f1e47723",
    "metadata": {},
    "source": [
     "Here this interferogram is just for a starting point right at the center of our source, so we expect these rays to map to regions that near in the center of our detector plane also. Let's check this:"
@@ -861,7 +861,7 @@
   {
    "cell_type": "code",
    "execution_count": 13,
-   "id": "dca82b47",
+   "id": "00608419",
    "metadata": {},
    "outputs": [
     {
@@ -903,7 +903,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "55b5c729",
+   "id": "87f6caa2",
    "metadata": {},
    "source": [
     "You can see that the rays are well focused right around the center of the detector plane. You can start to see two beams diverge which represents the two paths of light from different sides of the central mirror with different path lengths."
@@ -911,7 +911,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "20717c36",
+   "id": "5db08c4b",
    "metadata": {},
    "source": [
     "Now let's create the actual interferograms from ths:"
@@ -920,7 +920,7 @@
   {
    "cell_type": "code",
    "execution_count": 14,
-   "id": "b9fc8282",
+   "id": "04a5b2a7",
    "metadata": {},
    "outputs": [
     {
@@ -967,7 +967,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "dd8c256a",
+   "id": "512d5e6e",
    "metadata": {},
    "source": [
     "Note that this code actually creates a 5x5 grid of possible detector positons which segment the output rays into groups which are within the radius of each feed. The above interferogram plot shows the central interferogram, which again we expect to have pretty much all the signal since we only traced from the very central starting point. In practice, interferograms are computed by effectively summing up (incoherently) the contributions from each starting point. Since each starting offset maps to an offset in the detector plane, we just need to sample enough different starting offsets and then adding up all the interferograms in the detector plane.\n",
@@ -978,7 +978,7 @@
   {
    "cell_type": "code",
    "execution_count": 15,
-   "id": "4f58695b",
+   "id": "6e595262",
    "metadata": {},
    "outputs": [
     {
@@ -1006,7 +1006,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "62ceba34",
+   "id": "0afea1a3",
    "metadata": {},
    "source": [
     "As expected, none of these really have any signal except the central interferogram. "
@@ -1014,7 +1014,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "32cac30e",
+   "id": "955329ae",
    "metadata": {},
    "source": [
     "Now, let's compute the spectrum of this interferogram and infer the frequency shift:"
@@ -1023,7 +1023,7 @@
   {
    "cell_type": "code",
    "execution_count": 16,
-   "id": "cd142515",
+   "id": "40347153",
    "metadata": {},
    "outputs": [
     {
@@ -1062,7 +1062,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "27e0f367",
+   "id": "81a35dcc",
    "metadata": {},
    "source": [
     "So, for a centered point source and centered detector, the shift is exactly what we expect geometrically"
@@ -1070,7 +1070,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "1f57d3f8",
+   "id": "bb005ecf",
    "metadata": {},
    "source": [
     "## Amplitude transfer function"
@@ -1078,7 +1078,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "5415d7c7",
+   "id": "b184b3d5",
    "metadata": {},
    "source": [
     "Now, let's compute how the amplitude of the measured spectrum changes vs frequency. There are two effectively equivalent ways to do this:\n",
@@ -1091,7 +1091,7 @@
   {
    "cell_type": "code",
    "execution_count": 17,
-   "id": "c1bfd246",
+   "id": "4ceccc10",
    "metadata": {},
    "outputs": [
     {
@@ -1118,7 +1118,7 @@
   {
    "cell_type": "code",
    "execution_count": 18,
-   "id": "5a569d00",
+   "id": "8bdb7f78",
    "metadata": {},
    "outputs": [
     {
@@ -1154,7 +1154,7 @@
   },
   {
    "cell_type": "markdown",
-   "id": "c5124a87",
+   "id": "e32b2753",
    "metadata": {},
    "source": [
     "We see this these produce equivalent transfer functions. In practice I like to do method (1) since it is much faster and already less noisy."
@@ -1163,7 +1163,7 @@
   {
    "cell_type": "code",
    "execution_count": null,
-   "id": "6f1b9a6f",
+   "id": "6a68363f",
    "metadata": {},
    "outputs": [],
    "source": []
