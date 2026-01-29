@@ -14,20 +14,23 @@ def propagate_outrays_full_throw_high_res():
 
     total_outrays, displacements = get_outrays_threaded(
         x_vals, y_vals, n_mirror_positions, FTS_stage_throw,
-        n_linear_theta=300, n_linear_phi=15, debug=False)
+        n_linear_theta=3000, n_linear_phi=15, debug=False)
 
-    fname = "/data/talford/FTS_sim_results/total_outrays_0_45_625_20241120.p"
+    fname = "/data/talford/FTS_sim_results/total_outrays_0_45_625_20260128.p"
     for outrays in total_outrays:
         with open(fname, 'ab') as output:
             pickle.dump(outrays, output, pickle.HIGHEST_PROTOCOL)
 
     pickle.dump(displacements, open(
-        "/data/talford/FTS_sim_results/displacements_0_45_625_20241120.p", "wb"))
+        "/data/talford/FTS_sim_results/displacements_0_45_625_20260128.p", "wb"))
 
     # save this for loading elsewhere
     print('finished!')
 
 def main_20241121():
+    propagate_outrays_full_throw_high_res()
+
+def main_20260128():
     propagate_outrays_full_throw_high_res()
 
 def postprocess_20241121():
@@ -177,8 +180,8 @@ def postprocess_20241210_uhf():
 
 
 if __name__ == '__main__':
-    # main_20241121()
+    main_20260128()
     # postprocess_20241121()
     # postprocess_20241204_mf()
     # postprocess_20241205_lf()
-    postprocess_20241210_uhf()
+    # postprocess_20241210_uhf()
