@@ -12,7 +12,7 @@ at once, as well as changes in how the detector plane is segmented and how the
 rays are weighted assuming propagation into a detector feedhorn. 
 
 The main results from the simulation tailored to the ACT passband measurements
-compromise
+comprise
 
 (1) The Frequency shift found for this FTS dependent on the detector position
 relative to the FTS focus.
