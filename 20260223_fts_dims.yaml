@@ -1,0 +1,79 @@
+# Adjusts the y dimension to account for the non-zero thickness of the walls
+# for the mcmahon FTS
+
+polarizer_values:
+  1: .785398 # np.pi / 4
+  2: 1.570796 # np.pi / 2
+  3: 3.14159 # np.pi
+  4: .785398 # np.pi / 4
+
+# or origin locations:
+origins:
+  ellipses:
+    1: [-45, -226.162, 0.]  # x,y (ellipse1)
+    2: [45, -226.162, 0]  # x,y (ellipse2) #ELLIPSE DIMENSIONS:
+    3: [-45, 226.162, 0]  # x,y (ellipse3)
+    4: [45, 226.162, 0]  # x,y  (ellipse4)
+    5: [135, -226.162, 0]
+    6: [135, 226.162, 0]
+    7: [225, 226.162, 0] # not really used here..
+    8: [-135, -226.162, 0]
+    9: [-135, 226.162, 0]
+    10: [-225, 226.162, 0] # not really used here..
+
+  mirror: [0., 0., 0.] # Origin of the central moving mirror
+
+  polarizers:
+    1: [-180, 0, 0]  # global origin of polarizer 1
+    2: [-90, 0, 0]  # global origin of polarizer 2
+    3: [90, 0, 0]  # global origin of polarizer 3
+    4: [180, 0, 0]  # global origin of polarizer 4
+
+coefficients:
+  ellipses: [461.191, 452.324, 90]  # for all the ellipses
+  mirror: [42.278, 42.478, 0] # For the dihedral mirror
+  polarizers: [42.278, 42.478, 0] # For the polarizers
+
+angles: # angles of rotation:
+  ellipses: [0., 0., 0.]
+  polarizers:
+    1: [0., 0., 0.]
+    2: [0., 0., 0.]
+    3: [0., 0., 0.]
+    # try making #4 have a different tilt angle!
+    4: [0., 0., 0.]
+    # 4: [.7071, .7071, 0]
+
+# Centers and Ranges:
+# below are the geometric centers and ranges of aspects of the FTS.
+
+centers:
+  1: [0.0, 452.324, 0.0]
+  2: [0.0, 452.324, 0.0]
+  3: [0.0, -452.324, 0.0]
+  4: [0.0, -452.324, 0.0]
+  5: [0.0, 452.324, 0.0]
+  6: [0.0, -452.324, 0.0]
+  8: [0.0, 452.324, 0.0]
+  9: [0.0, -452.324, 0.0]
+  7: [0.0, -452.324, 0.0]
+  10: [0.0, -452.324, 0.0]
+
+ranges: [42.278, 200, 42.278]
+
+source:
+  center: [243.902, 331.979, 0]
+  range: 57.15
+  # rotate this by -11.25 deg about z
+  # change this to be the perfect beam angle/normal vector: -11.2533
+  normal_vec: [0.195147, 0.980774, 0]
+
+
+detector:
+  # maybe try stoppting 10mm or so before the first lens
+  # center: [-231.244, -266.219, 0.]
+  center: [-229.509, -257.205, 0.]
+  range: 1000
+  # normal vec should just be the beam angle
+  # normal_vec: [.189017, .981974, 0]
+  normal_vec: [0.195147, 0.980774, 0]
