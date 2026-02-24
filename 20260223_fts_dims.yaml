@@ -62,7 +62,7 @@ centers:
 ranges: [42.278, 200, 42.278]
 
 source:
-  center: [243.902, 331.979, 0]
+  center: [244.515, 324.209, 0]
   range: 57.15
   # rotate this by -11.25 deg about z
   # change this to be the perfect beam angle/normal vector: -11.2533
@@ -71,8 +71,10 @@ source:
 
 detector:
   # maybe try stoppting 10mm or so before the first lens
-  # center: [-231.244, -266.219, 0.]
-  center: [-229.509, -257.205, 0.]
+  # center: [-232.573, -264.225, 0.]
+  # center: [-213.059, -166.148, 0.] # go 100mm further away
+
+  center: [-154.515, -128.085, 0.]
   range: 1000
   # normal vec should just be the beam angle
   # normal_vec: [.189017, .981974, 0]

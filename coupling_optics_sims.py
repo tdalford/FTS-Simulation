@@ -10,18 +10,23 @@ from fts_coupling_optics_geo import *
 import plotly.graph_objects as go
 import plotly.io as pio
 import random
+import yaml
 from RayTraceFunctions import transformLG
 pio.renderers.default = 'browser'
 
-# shift_origin = [0., -266.21940725, -231.24377979]
-shift_origin = [0, -276.84436351, -233.28894593]
-# shift_origin = [0., 0., 0.]
-tilt_angle = [np.pi - .19016, 0, 0]
-# tilt_angle = [0, 0, 0]
+# shift_origin = [0, -276.84436351, -233.28894593]
+# tilt_angle = [np.pi - .19016, 0, 0]
 
 FOCUS = [0, ((210+82) * mm_to_in + 1.848), -20.9]
 CENTER_11 = [0, -.426, 0]
 
+pol_angle_convert = {
+    .04: {'dash': 'solid', 'shift': 0, 'color': 'black'},
+    .25: {'dash': 'dotted', 'shift': 2, 'color': 'purple'},
+    .75: {'dash': 'dashed', 'shift': -2, 'color': 'green'},
+    .5: {'dash': 'dotted', 'shift': -2, 'color': 'blue'},
+    1: {'dash': 'dashed', 'shift': 2, 'color': 'orange'},
+    0: {'dash': 'dashed', 'shift': 2, 'color': 'orange'}}
 
 def snell_vec(n1, n2, N_surf, s1):
     # s1 is the incoming vector, pointing from the light source to the surface
@@ -137,6 +142,71 @@ def plot_ray(x_vals, y_vals, z_vals, fig, color, alpha, shift=[0, 0, 0],
     fig.add_trace(line)
 
 
+def plot_surface_2d_notrans(x, y, z, fig, start, stop, color, half_index=50,
+                            shift=[0, 0, 0], tilt=[0, 0, 0], fac=1, alpha=.1):
+    # adjust this to make horizontal plots!
+    plt.plot(y * fac, z * fac, color=color)
+
+
+def plot_surface_2d(x, y, z, fig, start, stop, color, half_index=50,
+                    shift=[0, 0, 0], tilt=[0, 0, 0], fac=1, alpha=.1):
+
+    x_tot1, y_tot1, z_tot1, x_tot2, y_tot2, z_tot2 = ([], [], [], [], [], [])
+
+    for l in range(start, stop, 1):
+        x_new_1, y_new_1, z_new_1 = transformLG(
+            fac * x[:half_index, l], fac * y[:half_index, l],
+            fac * z[:half_index, l] * -1, shift, tilt)
+
+        x_new_2, y_new_2, z_new_2 = transformLG(
+            fac * x[half_index:, l], fac * y[half_index:, l],
+            fac * z[half_index:, l] * -1, shift, tilt)
+
+        # x_tot.extend(x[:half_index, l])
+        # y_tot.extend(y[:half_index, l])
+        # z_tot1.extend(z[:half_index, l])
+
+        # x_tot2.extend(x[half_index:, l])
+        # y_tot2.extend(y[half_index:, l])
+        # z_tot2.extend(z[half_index:, l])
+
+        x_tot1.extend(x_new_1)
+        y_tot1.extend(y_new_1)
+        z_tot1.extend(z_new_1)
+
+        x_tot2.extend(x_new_2)
+        y_tot2.extend(y_new_2)
+        z_tot2.extend(z_new_2)
+
+    # Change x and z directions to match FTS defined
+    plt.plot(z_tot1, y_tot1, color=color)
+    plt.plot(z_tot2, y_tot2, color=color)
+
+
+def plot_ray_2d(x_vals, y_vals, z_vals, fig, color, alpha, shift=[0, 0, 0],
+                tilt=[0, 0, 0], fac=1, pol_angle=0):
+    x_new, y_new, z_new = transformLG(fac * np.array(x_vals),
+                                      fac * np.array(y_vals),
+                                      fac * np.array(z_vals) * -1, shift, tilt)
+    pol_angle = np.round(np.mod(pol_angle, np.pi) / np.pi, 2)
+    # pol_angle_convert is a global defined previously.. a little messy I know
+    x_new[0] += pol_angle_convert[pol_angle]['shift']
+    x_new[1] += pol_angle_convert[pol_angle]['shift']
+    y_new[0] += pol_angle_convert[pol_angle]['shift']
+    y_new[1] += pol_angle_convert[pol_angle]['shift']
+    plt.plot(z_new, y_new, color=pol_angle_convert[pol_angle]['color'],
+             linestyle=pol_angle_convert[pol_angle]['dash'], linewidth=2)
+
+
+def plot_ray_2d_no_pol(x_vals, y_vals, z_vals, fig, color, alpha, shift=[0, 0, 0],
+                       tilt=[0, 0, 0], fac=1, pol_angle=None):
+    x_new, y_new, z_new = transformLG(fac * np.array(x_vals),
+                                      fac * np.array(y_vals),
+                                      fac * np.array(z_vals) * -1, shift, tilt)
+    plt.plot(y_new, z_new, color=color, linestyle='dashed', linewidth=2,
+             alpha=alpha)
+
+
 def norm(v):
     return np.sqrt(np.sum(np.square(v)))
 
@@ -184,7 +254,8 @@ def inverse_gaussian_function(x, mu, sigma):
 
 def run_rays_through_coupling_optics_reversed(
         P_rx, tele_geo, col, fig, starting_rays=None, n_linear=40,
-        alpha=.04, theta_bound=.1, plot=True, y_ap=CENTER_11[1]):
+        alpha=.04, theta_bound=.1, plot=True, y_ap=CENTER_11[1],
+        plot2d=False):
 
     # y_ap = -2.34 # this is where you want your rays to end (in y). You can definitely change this! I was just guessing.
     # y_ap = -20.9
@@ -800,11 +871,15 @@ def run_rays_through_coupling_optics_reversed(
             continue
         # print('plotting...')
         if (plot):
+            if plot2d:
+                plot_func = plot_ray_2d
+            else:
+                plot_func = plot_ray
             for i in range(len(x_points) - 1):
-                plot_ray([x_points[i], x_points[i + 1]], [y_points[i], y_points[i + 1]],
-                         [z_points[i], z_points[i + 1]], fig, col, alph,
-                         shift=shift_origin, tilt=tilt_angle,
-                         fac=(1 / mm_to_in))
+                plot_func([x_points[i], x_points[i + 1]], [y_points[i], y_points[i + 1]],
+                          [z_points[i], z_points[i + 1]], fig, col, alph,
+                          shift=shift_origin, tilt=tilt_angle,
+                          fac=(1 / mm_to_in))
 
         # Write out
         # print('writing out value %s' %ii)
@@ -831,24 +906,28 @@ def run_rays_through_coupling_optics_reversed(
         out[10].append(tan_og_t[2])
 
     if (plot):
-        plot_surface(Xt11, Yt11, Zt11, fig, 0, 100, 'teal', half_index=50,
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
-        plot_surface(Xt12, Yt12, Zt12, fig, 0, 100, 'teal',
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        if plot2d:
+            plot_func = plot_surface_2d
+        else:
+            plot_func = plot_surface
+        plot_func(Xt11, Yt11, Zt11, fig, 0, 100, 'teal', half_index=50,
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt12, Yt12, Zt12, fig, 0, 100, 'teal',
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
 
-        plot_surface(Xt21, Yt21, Zt21, fig, 0, 100, 'teal',
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
-        plot_surface(Xt22, Yt22, Zt22, fig, 0, 100, 'teal',
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt21, Yt21, Zt21, fig, 0, 100, 'teal',
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt22, Yt22, Zt22, fig, 0, 100, 'teal',
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
 
-        plot_surface(Xtflat, Ytflat, Ztflat, fig, 0, 100, 'silver',
-                     half_index=100, shift=shift_origin, tilt=tilt_angle,
-                     fac=(1 / mm_to_in), alpha=.3)
+        plot_func(Xtflat, Ytflat, Ztflat, fig, 0, 100, 'silver',
+                  half_index=100, shift=shift_origin, tilt=tilt_angle,
+                  fac=(1 / mm_to_in), alpha=.3)
 
-        plot_surface(Xt31, Yt31, Zt31, fig, 0, 100, 'teal', half_index=100,
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
-        plot_surface(Xt32, Yt32, Zt32, fig, 0, 100, 'teal', half_index=100,
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt31, Yt31, Zt31, fig, 0, 100, 'teal', half_index=100,
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt32, Yt32, Zt32, fig, 0, 100, 'teal', half_index=100,
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
 
     return np.array(out)  # , [x_points, y_points, z_points]
 
@@ -871,8 +950,16 @@ def get_final_rays_reversed(shift, n_linear, theta_bound=.3,
 
 
 def run_rays_through_coupling_optics_forwards(
-        P_rx, tele_geo, col, fig, starting_rays=None, n_linear=40, alpha=.04,
-        theta_bound=.1, plot=True, z_ap=FOCUS[2]):
+        P_rx, tele_geo, col, fig, config=None, starting_rays=None, n_linear=40, alpha=.04,
+        theta_bound=.1, plot=True, z_ap=FOCUS[2], plot2d=False):
+
+    if plot:
+        if config is None:
+            raise KeyError("No config specified for plotting coupling optics!")
+        coupling_optics_origin, beam_angle = get_coupling_optics_origin_and_beam_angle(config)
+        shift_origin = coupling_optics_origin[[2, 1, 0]]
+        # assert -np.pi <= beam_angle <= 0
+        tilt_angle = [np.pi + beam_angle, 0, 0]
 
     alph = alpha
     if (starting_rays is None):
@@ -1439,25 +1526,30 @@ def run_rays_through_coupling_optics_forwards(
         y_points = [y_0, y_11, y_12, y_21, y_22, y_flat, y_31, y_32, pos_ap[1]]
         z_points = [z_0, z_11, z_12, z_21, z_22, z_flat, z_31, z_32, pos_ap[2]]
 
-        # These rays aren't going to hit the FTS and are really incorrect here
-        # (surfaces defined don't really have boundaries so weird things can
-        # happen), so we discard them
-        # if np.abs(pos_ap[0]) > 2 or np.abs(pos_ap[2]) > 2:
-        #     continue
-        if (plot):
-            for i in range(len(x_points) - 1):
-                plot_ray([x_points[i], x_points[i + 1]],
-                         [y_points[i], y_points[i + 1]],
-                         [z_points[i], z_points[i + 1]], fig, col, alph,
-                         shift=shift_origin, tilt=tilt_angle,
-                         fac=(1 / mm_to_in))
-
         if (starting_rays is None):
             pol_angle = 0
             intensity = 1
         else:
             pol_angle = starting_rays[ii][0]
             intensity = starting_rays[ii][1]
+
+        # These rays aren't going to hit the FTS and are really incorrect here
+        # (surfaces defined don't really have boundaries so weird things can
+        # happen), so we discard them
+        # if np.abs(pos_ap[0]) > 2 or np.abs(pos_ap[2]) > 2:
+        #     continue
+        if (plot):
+            if plot2d:
+                plot_func = plot_ray_2d
+            else:
+                plot_func = plot_ray
+            for i in range(len(x_points) - 1):
+                plot_func([x_points[i], x_points[i + 1]],
+                          [y_points[i], y_points[i + 1]],
+                          [z_points[i], z_points[i + 1]], fig, col, alph,
+                          shift=shift_origin, tilt=tilt_angle,
+                          fac=(1 / mm_to_in), pol_angle=pol_angle)
+
         # Write out
         out[0].append(pos_ap[0])
         out[1].append(pos_ap[1])
@@ -1482,30 +1574,34 @@ def run_rays_through_coupling_optics_forwards(
         out[8].append(total_path_length)  # phase
 
     if (plot):
-        plot_surface(Xt11, Yt11, Zt11, fig, 0, 100, 'teal', half_index=50,
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
-        plot_surface(Xt12, Yt12, Zt12, fig, 0, 100, 'teal',
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        if plot2d:
+            plot_func = plot_surface_2d
+        else:
+            plot_func = plot_surface
+        plot_func(Xt11, Yt11, Zt11, fig, 0, 100, 'teal', half_index=50,
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt12, Yt12, Zt12, fig, 0, 100, 'teal',
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
 
-        plot_surface(Xt21, Yt21, Zt21, fig, 0, 100, 'teal',
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
-        plot_surface(Xt22, Yt22, Zt22, fig, 0, 100, 'teal',
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt21, Yt21, Zt21, fig, 0, 100, 'teal',
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt22, Yt22, Zt22, fig, 0, 100, 'teal',
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
 
-        plot_surface(Xtflat, Ytflat, Ztflat, fig, 0, 100, 'silver',
-                     half_index=100, shift=shift_origin, tilt=tilt_angle,
-                     fac=(1 / mm_to_in), alpha=.3)
+        plot_func(Xtflat, Ytflat, Ztflat, fig, 0, 100, 'silver',
+                  half_index=100, shift=shift_origin, tilt=tilt_angle,
+                  fac=(1 / mm_to_in), alpha=.3)
 
-        plot_surface(Xt31, Yt31, Zt31, fig, 0, 100, 'teal', half_index=100,
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
-        plot_surface(Xt32, Yt32, Zt32, fig, 0, 100, 'teal', half_index=100,
-                     shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt31, Yt31, Zt31, fig, 0, 100, 'teal', half_index=100,
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
+        plot_func(Xt32, Yt32, Zt32, fig, 0, 100, 'teal', half_index=100,
+                  shift=shift_origin, tilt=tilt_angle, fac=(1 / mm_to_in))
 
     return np.array(out)  # , [x_points, y_points, z_points]
 
 
 def run_rays_forwards(shift, n_linear, theta_bound=.3, z_ap=FOCUS[2], plot=False,
-                      fig=None, color=None):
+                      fig=None, color=None, plot2d=False):
     assert z_ap <= 0
     # we want the shift in mm so now let's convert to inches
     shift = np.multiply(shift, mm_to_in)
@@ -1514,20 +1610,31 @@ def run_rays_forwards(shift, n_linear, theta_bound=.3, z_ap=FOCUS[2], plot=False
 
     out = run_rays_through_coupling_optics_forwards(
         new_start, fts_geo, 'black', fig, n_linear=n_linear,
-        theta_bound=theta_bound, plot=plot, z_ap=z_ap, alpha=.2)
+        theta_bound=theta_bound, plot=plot, z_ap=z_ap, alpha=.2, plot2d=plot2d)
     # print(out)
 
     return out
 
 
-def run_rays_forwards_input_rays(starting_rays, z_ap=FOCUS[2], plot=False,
-                                 fig=None, color=None):
+def run_rays_forwards_input_rays(starting_rays, z_ap=FOCUS[2], config=None, plot=False,
+                                 fig=None, color=None, plot2d=False):
     assert z_ap <= 0
     # we want the shift in mm so now let's convert to inches
     # start_position = [0, -4.26 * (mm_to_in), 0]
 
     out = run_rays_through_coupling_optics_forwards(
-        None, fts_geo, color, fig, plot=plot, z_ap=z_ap, alpha=.2,
-        starting_rays=starting_rays)
+        None, fts_geo, color, fig, config=config, plot=plot, z_ap=z_ap, alpha=.2,
+        starting_rays=starting_rays, plot2d=plot2d)
 
     return out
+
+
+def get_coupling_optics_origin_and_beam_angle(config,
+                                              dist_to_coupling_optics=520):
+    # return np.array([0, 0, 0]), -3*np.pi / 2
+    beam_vector = normalize(np.subtract(config['origins']['polarizers'][
+        4], config['origins']['ellipses'][7]))
+    coupling_optics_origin = np.subtract(config['origins']['ellipses'][
+        9], dist_to_coupling_optics * abs(beam_vector))
+    beam_angle = np.arcsin(beam_vector[0])
+    return coupling_optics_origin, beam_angle

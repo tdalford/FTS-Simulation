@@ -5,24 +5,24 @@ import numpy as np
 import pickle
 
 def propagate_outrays_full_throw_high_res():
-    FTS_stage_throw = 35.     # total throw extent in mm
+    FTS_stage_throw = 20.     # total throw extent in mm
     FTS_stage_step_size = .1  # FTS step size in mm
     n_mirror_positions = (2 * FTS_stage_throw / FTS_stage_step_size) + 1
 
     # same amount of points as before, but better spaced around a circle
-    x_vals, y_vals = create_uniformly_spaced_points_circle(45, 625)
+    x_vals, y_vals = create_uniformly_spaced_points_circle(45, 100)
 
     total_outrays, displacements = get_outrays_threaded(
         x_vals, y_vals, n_mirror_positions, FTS_stage_throw,
-        n_linear_theta=3000, n_linear_phi=15, debug=False)
+        n_rays=225, debug=True)
 
-    fname = "/data/talford/FTS_sim_results/total_outrays_0_45_625_20260128.p"
+    fname = "/Users/talford/data/FTS_sim_results/total_outrays_0_45_625_20260224.p"
     for outrays in total_outrays:
         with open(fname, 'ab') as output:
             pickle.dump(outrays, output, pickle.HIGHEST_PROTOCOL)
 
     pickle.dump(displacements, open(
-        "/data/talford/FTS_sim_results/displacements_0_45_625_20260128.p", "wb"))
+        "/Users/talford/data/FTS_sim_results/displacements_0_45_625_20260224.p", "wb"))
 
     # save this for loading elsewhere
     print('finished!')
@@ -30,7 +30,7 @@ def propagate_outrays_full_throw_high_res():
 def main_20241121():
     propagate_outrays_full_throw_high_res()
 
-def main_20260128():
+def main_20260224():
     propagate_outrays_full_throw_high_res()
 
 def postprocess_20241121():
@@ -177,10 +177,41 @@ def postprocess_20241210_uhf():
     print('finished!')
 
 
+def postprocess_20260128():
+    data = []
+    fname = "/Users/talford/data/FTS_sim_results/total_outrays_0_45_625_20260128.p"
+    n_linear_det = 9
+    det_spacing = 5
+    det_size = 5.3
+
+    with open(fname, 'rb') as f:
+        try:
+            while True:
+                data.append(pickle.load(f))
+        except EOFError:
+            pass
+
+    freqs = np.arange(15, 305, 5)
+    fname = "/Users/talford/data/FTS_sim_results/all_discrete_interferograms_20260128.p"
+    # z_coordinates = (1 / utils.IN_TO_MM) * np.linspace(-100, 100, 25)
+    # we already have 8 coordinates finished!
+    z_coordinates = (1 / utils.IN_TO_MM) * np.linspace(-100, 100, 25)[9:]
+
+    for z in z_coordinates:
+        total_interferogram_list_at_z, frequency_list = \
+            postprocess_interferograms_discrete(
+                data, freqs, n_linear_det, det_spacing, det_size, z_shift=z)
+
+        pickle.dump([z, frequency_list, total_interferogram_list_at_z], open(
+            fname, "ab"), pickle.HIGHEST_PROTOCOL)
+
+    # save this for loading elsewhere
+    print('finished!')
+
 
 
 if __name__ == '__main__':
-    main_20260128()
+    main_20260224()
     # postprocess_20241121()
     # postprocess_20241204_mf()
     # postprocess_20241205_lf()

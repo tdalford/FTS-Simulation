@@ -10,12 +10,9 @@ from tqdm import tqdm
 import time
 
 c = 300.
-LAST_LENS_EDGE = [-231.24377979, -266.21940725, 0.]
-COUPLING_OPTICS_ORIGIN = [-233.28894593160666, -276.84436350628596, 0.]
 IN_TO_MM = 1 / (csims.mm_to_in)
 # DET_SIZE = 5  # in mm
 # For LF: 14mm, for MF/UHF: 5mm
-FTS_BEAM_ANGLE = -0.190161
 
 
 def get_aspect(config, aspect, element, number):
@@ -120,7 +117,8 @@ def transform_points(x_vals, y_vals, z_vals, new_origin, rotation_matrix):
     return XTR, YTR, ZTR
 
 
-def transform_rays_to_coupling_optics_frame(rays):
+def transform_rays_to_coupling_optics_frame(rays, config,
+                                            dist_to_coupling_optics=520):
     # we want the rays essentially directly after they hit the last polarizer
     # in the FTS and then we need to calculate the distance between this
     # polarizer and the first lens of the coupling optics
@@ -133,15 +131,17 @@ def transform_rays_to_coupling_optics_frame(rays):
     # coupling optics actually things should be fine I think, but just in case
     # do it this way I guess
     # don't stop at (0, 0, 0), stop at (0, -.426, 0) equivilently
-    coupling_optics_origin = COUPLING_OPTICS_ORIGIN
+
+    coupling_optics_origin, beam_angle = csims.get_coupling_optics_origin_and_beam_angle(
+        config, dist_to_coupling_optics=dist_to_coupling_optics)
     factor = csims.mm_to_in
     new_rays = []
     for ray in rays:
         new_ray = [ray[0], ray[1], None, None, ray[4]]
         # switch the x and z coordinate of these!
-        new_vec = rt.rotate(ray[3], [0, 0, FTS_BEAM_ANGLE])
+        new_vec = rt.rotate(ray[3], [0, 0, beam_angle])
         new_ray[2] = factor * np.flip(rt.rotate(np.subtract(
-            ray[2], coupling_optics_origin), [0, 0, FTS_BEAM_ANGLE]) * [
+            ray[2], coupling_optics_origin), [0, 0, beam_angle]) * [
                 1, -1, 1])
         new_ray[3] = np.flip(csims.normalize(factor * new_vec * [1, -1, 1]))
         new_rays.append(new_ray)
@@ -212,10 +212,10 @@ def create_source_rays_lambertian(
     # assume radially symmetric source
     rotation_matrix = get_rotation_matrix(source_normal_vec, [0, 0, 1])
     rays = []
-    
+
     if (count_thetas):
         good_vals = []
-    
+
     # n^2 computations here
     starting_time = time.time()
     mu_min = np.cos(theta_bound)
@@ -233,25 +233,25 @@ def create_source_rays_lambertian(
             point_origin = [horiz_displacement, vert_displacement, 0]
 
             # Direction of ray away from the starting point
-            r_hat = [np.sin(theta_val) * np.cos(phi_val), 
+            r_hat = [np.sin(theta_val) * np.cos(phi_val),
                      np.sin(theta_val) * np.sin(phi_val), np.cos(theta_val)]
 
             transformed_starting_vector = -1 * np.array(transform_points(
                 [r_hat[0]], [r_hat[1]], [r_hat[2]], [0, 0, 0], rotation_matrix)).flatten()
 
             transformed_starting_point = np.array(transform_points(
-                [point_origin[0]], [point_origin[1]], [point_origin[2]], 
+                [point_origin[0]], [point_origin[1]], [point_origin[2]],
                 source_origin, rotation_matrix)).flatten()
 
-            
+
             # polarization vector arbitratily defined here, but strategically
             # not set to some value so that some light has to be reflected and
             # transmitted at the first polarizer.
             polarization_angle = .123
             intensity = 1.0
-            ray = [polarization_angle, intensity, transformed_starting_point.tolist(), 
+            ray = [polarization_angle, intensity, transformed_starting_point.tolist(),
                 transformed_starting_vector.tolist(), 0]
-            
+
             if (check_rays):
                 # strategically choose our starting rays such that they make it
                 # through the to the first ellipse that we hit
@@ -266,7 +266,7 @@ def create_source_rays_lambertian(
                 if (count_thetas):
                     # for debugging purposes
                     good_vals.append([theta_val, phi_val])
-    
+
     if (count_thetas):
         return rays, good_vals
     return rays
@@ -295,14 +295,14 @@ def create_source_rays_lambertian_monte_carlo(
         point_origin = [horiz_displacement, vert_displacement, 0]
 
         # Direction of ray away from the starting point
-        r_hat = [np.sin(theta_val) * np.cos(phi_val), 
+        r_hat = [np.sin(theta_val) * np.cos(phi_val),
                     np.sin(theta_val) * np.sin(phi_val), np.cos(theta_val)]
 
         transformed_starting_vector = -1 * np.array(transform_points(
             [r_hat[0]], [r_hat[1]], [r_hat[2]], [0, 0, 0], rotation_matrix)).flatten()
 
         transformed_starting_point = np.array(transform_points(
-            [point_origin[0]], [point_origin[1]], [point_origin[2]], 
+            [point_origin[0]], [point_origin[1]], [point_origin[2]],
             source_origin, rotation_matrix)).flatten()
 
 
@@ -311,7 +311,7 @@ def create_source_rays_lambertian_monte_carlo(
         # transmitted at the first polarizer.
         polarization_angle = .123
         intensity = 1.0
-        ray = [polarization_angle, intensity, transformed_starting_point.tolist(), 
+        ray = [polarization_angle, intensity, transformed_starting_point.tolist(),
             transformed_starting_vector.tolist(), 0]
 
         if (check_rays):
@@ -328,7 +328,7 @@ def create_source_rays_lambertian_monte_carlo(
             if (count_thetas):
                 # for debugging purposes
                 good_vals.append([theta_val, phi_val])
-    
+
     if (count_thetas):
         return rays, good_vals
     return rays
@@ -395,7 +395,7 @@ def trace_rays_uniform(start_displacement, n_mirror_positions, ymax,
     total_outrays = []
 
     for rays in tqdm(final_rays, disable=(not debug)):
-        transformed_rays = transform_rays_to_coupling_optics_frame(rays)
+        transformed_rays = transform_rays_to_coupling_optics_frame(rays, config)
         out_forwards = csims.run_rays_forwards_input_rays(
             transformed_rays, z_ap=csims.FOCUS[2], plot=False)
         total_outrays.append(out_forwards)
@@ -404,25 +404,15 @@ def trace_rays_uniform(start_displacement, n_mirror_positions, ymax,
 
 
 # Use lambertian distribution.
-def trace_rays(start_displacement, n_mirror_positions, ymax, n_rays,
-               debug=False):
-    # The way I originally defined the FTS in my config files was backwards
-    # since Jeff initially wanted to do a reverse raytrace. Later I realized
-    # that the nature of the thermal source required a forwards raytrace within
-    # the limited sampling space we have. Thus I just grab the source position
-    # from what I has originally defined as the 'detector', while the rest of
-    # the FTS raytrace is defined via the forward-raytrace oriented config file
-    # defined in the aptly named 'lab_fts_dims_mcmahon_backwards.yml'
-    with open("lab_fts_dims_act.yml", "r") as stream:
+def trace_rays(start_displacement, n_mirror_positions, ymax, n_rays, debug=False):
+    # This config defines a source position and normal vector to use.
+    with open("20260223_fts_dims.yaml", "r") as stream:
         config = yaml.safe_load(stream)
 
     starting_rays = create_source_rays_lambertian_monte_carlo(
-        config['detector']['center'], config['detector']['normal_vec'],
+        config['source']['center'], config['source']['normal_vec'],
         start_displacement[0], start_displacement[1], n_rays,
         config, theta_bound=np.pi / 2, check_rays=True)
-
-    with open("lab_fts_dims_mcmahon_backwards.yml", "r") as stream:
-        config = yaml.safe_load(stream)
 
     # I originally described the possible paths through the FTS in reverse
     # also. Realistically I believe they should be symmetric for both forwards
@@ -441,7 +431,7 @@ def trace_rays(start_displacement, n_mirror_positions, ymax, n_rays,
     # Transform the rays to the frame of the coupling optics and propgate them
     # through this optical system.
     for rays in tqdm(final_rays, disable=(not debug)):
-        transformed_rays = transform_rays_to_coupling_optics_frame(rays)
+        transformed_rays = transform_rays_to_coupling_optics_frame(rays, config)
         out_forwards = csims.run_rays_forwards_input_rays(
             transformed_rays, z_ap=csims.FOCUS[2], plot=False)
         total_outrays.append(out_forwards)
@@ -492,7 +482,7 @@ def get_interferogram_frequency(outrays, frequencies, debug=True):
 
     total_power = np.zeros(outrays.shape[0])
     for freq in tqdm(frequencies, disable=(not debug)):
-        
+
         wavelength = c / freq
         phase = np.exp(1j * (distance * 2 * np.pi / wavelength))
         ex = ex1 * phase
