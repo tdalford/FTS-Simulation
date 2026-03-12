@@ -131,7 +131,7 @@ def plot_surface(x, y, z, fig, start, stop, color, half_index=50,
 
 
 def plot_ray(x_vals, y_vals, z_vals, fig, color, alpha, shift=[0, 0, 0],
-             tilt=[0, 0, 0], fac=1):
+             tilt=[0, 0, 0], fac=1, pol_angle=None):
 
     x_new, y_new, z_new = transformLG(fac * np.array(x_vals),
                                       fac * np.array(y_vals),
@@ -951,15 +951,19 @@ def get_final_rays_reversed(shift, n_linear, theta_bound=.3,
 
 def run_rays_through_coupling_optics_forwards(
         P_rx, tele_geo, col, fig, config=None, starting_rays=None, n_linear=40, alpha=.04,
-        theta_bound=.1, plot=True, z_ap=FOCUS[2], plot2d=False):
+        theta_bound=.1, plot=True, z_ap=FOCUS[2], plot2d=False, plot_local=False):
 
     if plot:
-        if config is None:
-            raise KeyError("No config specified for plotting coupling optics!")
-        coupling_optics_origin, beam_angle = get_coupling_optics_origin_and_beam_angle(config)
-        shift_origin = coupling_optics_origin[[2, 1, 0]]
-        # assert -np.pi <= beam_angle <= 0
-        tilt_angle = [np.pi + beam_angle, 0, 0]
+        if plot_local:
+            shift_origin = np.array([0, 0, 0])
+            tilt_angle = np.array([-np.pi / 2, 0, 0])
+        else:
+            if config is None:
+                raise KeyError("No config specified for plotting coupling optics!")
+            coupling_optics_origin, beam_angle = get_coupling_optics_origin_and_beam_angle(config)
+            shift_origin = coupling_optics_origin[[2, 1, 0]]
+            # assert -np.pi <= beam_angle <= 0
+            tilt_angle = [np.pi + beam_angle, 0, 0]
 
     alph = alpha
     if (starting_rays is None):
@@ -1601,7 +1605,7 @@ def run_rays_through_coupling_optics_forwards(
 
 
 def run_rays_forwards(shift, n_linear, theta_bound=.3, z_ap=FOCUS[2], plot=False,
-                      fig=None, color=None, plot2d=False):
+                      fig=None, color=None, plot2d=False, config=None):
     assert z_ap <= 0
     # we want the shift in mm so now let's convert to inches
     shift = np.multiply(shift, mm_to_in)
@@ -1610,21 +1614,22 @@ def run_rays_forwards(shift, n_linear, theta_bound=.3, z_ap=FOCUS[2], plot=False
 
     out = run_rays_through_coupling_optics_forwards(
         new_start, fts_geo, 'black', fig, n_linear=n_linear,
-        theta_bound=theta_bound, plot=plot, z_ap=z_ap, alpha=.2, plot2d=plot2d)
+        theta_bound=theta_bound, plot=plot, z_ap=z_ap, alpha=.2, plot2d=plot2d,
+        config=config)
     # print(out)
 
     return out
 
 
 def run_rays_forwards_input_rays(starting_rays, z_ap=FOCUS[2], config=None, plot=False,
-                                 fig=None, color=None, plot2d=False):
+                                 fig=None, color=None, plot2d=False, plot_local=False):
     assert z_ap <= 0
     # we want the shift in mm so now let's convert to inches
     # start_position = [0, -4.26 * (mm_to_in), 0]
 
     out = run_rays_through_coupling_optics_forwards(
         None, fts_geo, color, fig, config=config, plot=plot, z_ap=z_ap, alpha=.2,
-        starting_rays=starting_rays, plot2d=plot2d)
+        starting_rays=starting_rays, plot2d=plot2d, plot_local=plot_local)
 
     return out
 
